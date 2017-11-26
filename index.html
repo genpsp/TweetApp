@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="UTF-8">
+	<meta lang="ja">
+	<link rel="stylesheet" type="text/css" href="css/style.css">
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/react/15.1.0/react.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/react/15.1.0/react-dom.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/react-router-dom/4.2.2/react-router-dom.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-core/5.8.34/browser.min.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.2.0/jquery.min.js"></script>
+	<script src="https://www.gstatic.com/firebasejs/4.6.2/firebase.js"></script>
+</head>
+
+<body>
+	<div id="tweet"></div>
+
+	<script type="text/babel">
+		// Initialize Firebase
+		var config = {
+			apiKey: "AIzaSyCihVW-CZ6TB4-tpodcDji2c0thcqbJa88",
+			authDomain: "tweetapp-40750.firebaseapp.com",
+			databaseURL: "https://tweetapp-40750.firebaseio.com",
+			projectId: "tweetapp-40750",
+			storageBucket: "tweetapp-40750.appspot.com",
+			messagingSenderId: "608876522070"
+		};
+		firebase.initializeApp(config);
+
+		//firebase設定
+		var firebaseRef = firebase.database().ref();
+		var tweetsRef = firebaseRef.child("tweets");
+		var usersRef = firebaseRef.child("users");
+
+		//ルーター変数定義
+		var Router = ReactRouterDOM.BrowserRouter
+		var Route = ReactRouterDOM.Route
+		var Link = ReactRouterDOM.Link
+		var IndexRoute = ReactRouterDOM.IndexRoute
+		var browserHistory = ReactRouterDOM.BrowserHistory
+		var Switch = ReactRouterDOM.Switch
+
+		//ログイン画面
+		class LoginContainer extends React.Component {
+			constructor(props) {
+    		super(props);
+				this.state = {
+					users: []
+				};
+				usersRef.once("value", (snapshot)　=> {
+					this.setState({
+						users: snapshot.val()
+					});
+				});
+  		}
+			//ユーザー登録
+			_onClickSignUp(e){
+				var email = document.getElementById("email").value;
+				var password = document.getElementById("password").value;
+				var userName = document.getElementById("userName").value;
+
+				firebase.auth().createUserWithEmailAndPassword(email, password).then((user) => {
+					usersRef.once("value", (snapshot)　=> {
+						this.setState({
+							users: snapshot.val()
+						});
+					});
+					this.state.users.push({
+						userName: userName
+					});
+					usersRef.set(this.state.users);
+					return user.updateProfile({
+						displayName: document.getElementById("userName").value
+					});
+				}).catch(function(error){
+					alert(error);
+				});
+				firebase.auth().onAuthStateChanged( (user) => {
+					if(user){
+						var currentUser = firebase.auth().currentUser;
+						console.log(currentUser);
+						console.log("signup!");
+						this.props.history.push({
+							pathname: "/tweet",
+							state: {
+								tweets: [],
+								users: this.state.users
+							}
+						});
+					}else{
+						this.props.history.push("/");
+					}
+				});
+			}
+			//ログイン
+			_onClickLogin(e){
+				var email = document.getElementById("email").value;
+				var password = document.getElementById("password").value;
+
+				firebase.auth().signInWithEmailAndPassword(email, password).catch(function(error){
+					alert(error);
+				});
+				firebase.auth().onAuthStateChanged( (user) => {
+					if(user){
+						this.props.history.push({
+							pathname: "/tweet",
+							state: {
+								tweets: [],
+								users: this.state.users
+							}
+						});
+					}else{
+						this.props.history.push("/");
+					}
+				});
+			}
+			render(){
+				return(
+					<div className="loginContainer">
+						<h1>LOGIN</h1>
+						mail:	<input id="email" type="text" placeholder="e-mail" /><br />
+						name:	<input id="userName" type="text" placeholder="displayName" /><br />
+						pass:	<input id="password" type="text" placeholder="password" /><br />
+						<button onClick={this._onClickLogin.bind(this)}>login</button> or <button onClick={this._onClickSignUp.bind(this)}>sign-up</button>
+					</div>
+				);
+			}
+		}
+
+		//登録ユーザーリスト
+		class UserList extends React.Component {
+			constructor(props) {
+    		super(props);
+  		}
+			render(){
+				return(
+					<div className="userList">
+						<div className="user">・{this.props.user.userName}</div>
+					</div>
+				);
+			}
+		}
+
+		// メインツイート画面
+		class TweetContainer extends React.Component{
+			constructor(props) {
+    		super(props);
+				this.state = props.location.state;
+				usersRef.set(this.state.users);
+				console.log("initialized");
+  		}
+			componentDidMount(){
+				tweetsRef.on("value", (snapshot)　=> {
+					this.setState({
+						tweets: snapshot.val()
+					});
+				});
+				usersRef.on("value", (snapshot)　=> {
+					this.setState({
+						users: snapshot.val()
+					});
+				});
+			}
+			_onClickLogOut(){
+				firebase.auth().signOut();
+				console.log("logout");
+			}
+			render(){
+				var tweetItems = this.state.tweets.map(function(tweet){
+					return (
+						<TweetItem tweet={tweet} />
+					);
+				});
+				var userList = this.state.users.map(function(user){
+					return (
+						<UserList user={user} />
+					);
+				});
+				return(
+					<div className="mainContainer clearfix">
+						<div className="tweetContainer">
+							<h1>Tweet Room</h1><hr />
+							{tweetItems}
+							<hr />
+							<TweetForm tweet={this.state.tweets}/>
+							<button className="logout" onClick={this._onClickLogOut.bind(this)}>logout</button>
+						</div>
+						<div className="userListContainer">
+							<h2>Users</h2>
+							{userList}
+						</div>
+					</div>
+				);
+			}
+		}
+
+		//ツイートアイテム
+		class TweetItem extends React.Component{
+			constructor(props) {
+    		super(props);
+  		}
+			render(){
+				return(
+					<div className="tweetItem">
+						<div className="tweet">{this.props.tweet.userName}> {this.props.tweet.text}</div>
+					</div>
+				);
+			}
+		}
+
+		//送信フォーム
+		class TweetForm extends React.Component{
+			constructor(props) {
+    		super(props);
+				this._onClick = this._onClick.bind(this);
+  		}
+			_onClick(e){
+					this.props.tweet.push({
+						userName: firebase.auth().currentUser.displayName,
+						text: ReactDOM.findDOMNode(this.refs.inputValue).value
+					});
+					tweetsRef.set(this.props.tweet);
+					ReactDOM.findDOMNode(this.refs.inputValue).value　="";
+			}
+			render(){
+				return(
+					<div className="tweetForm">
+						<input ref="inputValue" type="text" placeholder="message..." />
+						<input type="button" value="送信" onClick={this._onClick.bind(this)}/>
+					</div>
+				);
+			}
+		}
+
+		//ルーティング設定
+		var Routes = (
+			<div>
+				<Switch>
+					<Route exact path="/" component={LoginContainer} />
+					<Route path="/tweet" component={TweetContainer} />
+				</Switch>
+			</div>
+		);
+
+		//レンダリング
+		ReactDOM.render(
+			<Router history={browserHistory}>{Routes}</Router>,
+			document.getElementById("tweet")
+		);
+	</script>
+
+</body>
+</html>
